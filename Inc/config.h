@@ -44,7 +44,7 @@
 /* ==================================== SETTINGS MPU-6050 ==================================== */
 #define MPU_SENSOR_ENABLE                     // [-] Enable flag for MPU-6050 sensor. Comment-out this flag to Disable the MPU sensor and reduce code size.
 #define MPU_DMP_ENABLE                        // [-] Enable flag for MPU-6050 DMP (Digital Motion Processing) functionality.
-#define MPU_DEFAULT_HZ            20          // [Hz] Default MPU frequecy: must be between 1Hz and 200Hz.
+#define MPU_DEFAULT_HZ            200          // [Hz] Default MPU frequecy: must be between 1Hz and 200Hz.
 #define TEMP_READ_MS              500         // [ms] Temperature read time interval
 #define PEDO_READ_MS              1000        // [ms] Pedometer read time interval
 // #define USE_CAL_HW_REGISTERS                  // [-] Uncommnent this to SAVE the sensor calibration to the MPU-6050 registers after the Self-test was run
@@ -88,6 +88,17 @@
 #endif
 
 
+/* ==================================== VARIANT ONEWHEEL ==================================== */
+#ifdef VARIANT_ONEWHEEL
+  #define SERIAL_CONTROL                      // [-] Define for Serial Control via the serial port
+  #define SERIAL_FEEDBACK                     // [-] Define for Serial Feedback via the serial port
+
+  // Control Scheme (select only one)
+  #define CTRL_SCHEME_LQR
+  //#define CTRL_SCHEME_MANUAL
+
+#endif
+
 /* ==================================== VARIANT HOVERCAR ==================================== */
 #ifdef VARIANT_HOVERCAR
   #define SERIAL_CONTROL                      // [-] Define for Serial Control via the serial port
@@ -117,6 +128,10 @@
 
 #if defined(SERIAL_DEBUG) && defined(SERIAL_FEEDBACK)
   #error SERIAL_DEBUG and SERIAL_FEEDBACK not allowed. It is on the same cable.
+#endif
+
+#if defined(CTRL_SCHEME_LQR) && (!defined(SERIAL_FEEDBACK) || !defined(SERIAL_CONTROL))
+  #error CTRL_SCHEME_LQR fundamentally requires SERIAL_CONTROL and SERIAL_FEEDBACK to calculate velocity and position.
 #endif
 
 #if defined(AUX45_USE_GPIO) && (defined(SERIAL_AUX_RX) || defined(SERIAL_AUX_TX) || defined(AUX45_USE_I2C)) \
