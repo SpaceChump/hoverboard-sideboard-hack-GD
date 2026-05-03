@@ -33,7 +33,7 @@
 #endif
 
 /* ==================================== DO NOT TOUCH SETTINGS ==================================== */
-#define MPU6050                               // [-] Define IMU sensor type
+#define MPU6500                               // [-] Define IMU sensor type
 #define MPU_GYRO_FSR              2000        // [deg/s] Set Gyroscope Full Scale Range: 250 deg/s, 500 deg/s, 1000 deg/s, 2000 deg/s. !! DMP sensor fusion works only with 2000 deg/s !!
 #define MPU_ACCEL_FSR             2           // [g] Set Acceleromenter Full Scale Range: 2g, 4g, 8g, 16g. !! DMP sensor fusion works only with 2g !!
 #define MPU_I2C_SPEED             400000      // [bit/s] Define I2C speed for communicating with the MPU6050
