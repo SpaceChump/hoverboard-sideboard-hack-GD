@@ -149,6 +149,16 @@ void toggle_led(uint32_t gpio_periph, uint32_t pin)
     GPIO_OCTL(gpio_periph) ^= pin;
 }
 
+void set_pwm_leds(uint8_t val1, uint8_t val2, uint8_t val3) {
+    val1 = CLAMP(val1, 0, 255);
+    val2 = CLAMP(val2, 0, 255);
+    val3 = CLAMP(val3, 0, 255);
+
+    timer_channel_output_pulse_value_config(TIMER2, TIMER_CH_0, val1); 
+    timer_channel_output_pulse_value_config(TIMER2, TIMER_CH_1, val2); 
+    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_0, val3); 
+}
+
 
 void intro_demo_led(uint32_t tDelay)
 {
@@ -378,16 +388,9 @@ void handle_usart(void) {
  * Handle of the sideboard LEDs
  */
 void handle_leds(void) {
-    #ifdef SERIAL_FEEDBACK
-        if (!timeoutFlagSerial1) {
-            if (Feedback.cmdLed & LED1_SET) { gpio_bit_set(LED1_GPIO_Port, LED1_Pin); } else { gpio_bit_reset(LED1_GPIO_Port, LED1_Pin); }
-            if (Feedback.cmdLed & LED2_SET) { gpio_bit_set(LED2_GPIO_Port, LED2_Pin); } else { gpio_bit_reset(LED2_GPIO_Port, LED2_Pin); }
-            if (Feedback.cmdLed & LED3_SET) { gpio_bit_set(LED3_GPIO_Port, LED3_Pin); } else { gpio_bit_reset(LED3_GPIO_Port, LED3_Pin); }
-            if (Feedback.cmdLed & LED4_SET) { gpio_bit_set(LED4_GPIO_Port, LED4_Pin); } else { gpio_bit_reset(LED4_GPIO_Port, LED4_Pin); }
-            if (Feedback.cmdLed & LED5_SET) { gpio_bit_set(LED5_GPIO_Port, LED5_Pin); } else { gpio_bit_reset(LED5_GPIO_Port, LED5_Pin); }
-            if (Feedback.cmdLed & LED4_SET) { gpio_bit_set(AUX3_GPIO_Port, AUX3_Pin); } else { gpio_bit_reset(AUX3_GPIO_Port, AUX3_Pin); }
-        }
-    #endif
+
+    set_pwm_leds(255, 255, 255);
+
 }
 
 

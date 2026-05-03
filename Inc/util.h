@@ -75,6 +75,7 @@ typedef struct{
 /* general functions */
 void consoleLog(char *message);
 void toggle_led(uint32_t gpio_periph, uint32_t pin);
+void set_pwm_leds(uint8_t val1, uint8_t val2, uint8_t val3);
 void intro_demo_led(uint32_t tDelay);
 uint8_t switch_check(uint16_t ch, uint8_t type);
 
