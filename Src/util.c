@@ -389,7 +389,7 @@ void handle_usart(void) {
  */
 void handle_leds(void) {
 
-    set_pwm_leds(255, 255, 255);
+    set_pwm_leds(255, 10, 150);
 
 }
 

@@ -66,23 +66,86 @@ void gpio_config(void) {
     rcu_periph_clock_enable(RCU_GPIOB);
 
     /* configure GPIO port */ 
-    gpio_mode_set(LED1_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED1_Pin);
-    gpio_mode_set(LED2_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED2_Pin);
-    gpio_mode_set(LED3_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED3_Pin);
+    gpio_mode_set(LED1_GPIO_Port, GPIO_MODE_AF, GPIO_PUPD_NONE, LED1_Pin);
+    gpio_mode_set(LED2_GPIO_Port, GPIO_MODE_AF, GPIO_PUPD_NONE, LED2_Pin);
+    gpio_mode_set(LED3_GPIO_Port, GPIO_MODE_AF, GPIO_PUPD_NONE, LED3_Pin);
+
     gpio_mode_set(LED4_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED4_Pin);
     gpio_mode_set(LED5_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED5_Pin);
+    gpio_mode_set(LED6_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED6_Pin);
+    gpio_mode_set(LED7_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED7_Pin);
+    gpio_mode_set(LED8_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED8_Pin);
+    
+    gpio_mode_set(LED9_GPIO_Port, GPIO_MODE_AF, GPIO_PUPD_NONE, LED9_Pin);
+    gpio_mode_set(LED10_GPIO_Port, GPIO_MODE_AF, GPIO_PUPD_NONE, LED10_Pin);
+    gpio_mode_set(LED11_GPIO_Port, GPIO_MODE_AF, GPIO_PUPD_NONE, LED11_Pin);
+
+    /* 3. Configure Output Options (Push-Pull, 50MHz High Speed) */
     gpio_output_options_set(LED1_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED1_Pin);
     gpio_output_options_set(LED2_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED2_Pin);
     gpio_output_options_set(LED3_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED3_Pin);
+    
     gpio_output_options_set(LED4_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED4_Pin);
     gpio_output_options_set(LED5_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED5_Pin);
+    gpio_output_options_set(LED6_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED6_Pin);
+    gpio_output_options_set(LED7_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED7_Pin);
+    gpio_output_options_set(LED8_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED8_Pin);
+    
+    gpio_output_options_set(LED9_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED9_Pin);
+    gpio_output_options_set(LED10_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED10_Pin);
+    gpio_output_options_set(LED11_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED11_Pin);
 
-    /* reset GPIO pin */
-    gpio_bit_reset(LED1_GPIO_Port, LED1_Pin);
-    gpio_bit_reset(LED2_GPIO_Port, LED2_Pin);
-    gpio_bit_reset(LED3_GPIO_Port, LED3_Pin);
+    gpio_af_set(LED1_GPIO_Port, GPIO_AF_1, LED1_Pin); 
+    gpio_af_set(LED2_GPIO_Port, GPIO_AF_1, LED2_Pin); 
+    gpio_af_set(LED3_GPIO_Port, GPIO_AF_2, LED3_Pin);
+
+    rcu_periph_clock_enable(RCU_TIMER2);
+    rcu_periph_clock_enable(RCU_TIMER2);
+
+    // 4. Configure the Timer Base (The Frequency)
+    timer_parameter_struct timer_initpara = {0};
+    timer_initpara.prescaler         = 47;     
+    timer_initpara.alignedmode       = TIMER_COUNTER_EDGE;
+    timer_initpara.counterdirection  = TIMER_COUNTER_UP;
+    timer_initpara.period            = 255;    // 0 to 255 Brightness scale
+    timer_initpara.clockdivision     = TIMER_CKDIV_DIV1;
+    
+    timer_init(TIMER1, &timer_initpara); 
+    timer_init(TIMER2, &timer_initpara); 
+
+    // 5. Configure the Output Channels
+    timer_oc_parameter_struct timer_ocintpara = {0}; // Just one clean declaration!
+    
+    timer_ocintpara.outputstate  = TIMER_CCX_ENABLE; // DON'T FORGET THIS: Turns the pin on!
+    timer_ocintpara.ocpolarity   = TIMER_OC_POLARITY_HIGH;
+
+    // Attach Channel 0 on Timer 1 (LED3 / PA5)
+    timer_channel_output_config(TIMER1, TIMER_CH_0, &timer_ocintpara);
+    timer_channel_output_mode_config(TIMER1, TIMER_CH_0, TIMER_OC_MODE_PWM0);
+
+    // Attach Channels 0 & 1 on Timer 2 (LED1 / PB4 & LED2 / PB5)
+    timer_channel_output_config(TIMER2, TIMER_CH_0, &timer_ocintpara);
+    timer_channel_output_mode_config(TIMER2, TIMER_CH_0, TIMER_OC_MODE_PWM0);
+    timer_channel_output_config(TIMER2, TIMER_CH_1, &timer_ocintpara);
+    timer_channel_output_mode_config(TIMER2, TIMER_CH_1, TIMER_OC_MODE_PWM0);
+
+    // 6. Ensure they start turned completely off (0% brightness)
+    timer_channel_output_pulse_value_config(TIMER1, TIMER_CH_0, 0); // LED3
+    timer_channel_output_pulse_value_config(TIMER2, TIMER_CH_0, 0); // LED1
+    timer_channel_output_pulse_value_config(TIMER2, TIMER_CH_1, 0); // LED2
+    
     gpio_bit_reset(LED4_GPIO_Port, LED4_Pin);
     gpio_bit_reset(LED5_GPIO_Port, LED5_Pin);
+    gpio_bit_reset(LED6_GPIO_Port, LED6_Pin);
+    gpio_bit_reset(LED7_GPIO_Port, LED7_Pin);
+    gpio_bit_reset(LED8_GPIO_Port, LED8_Pin);
+    
+    gpio_bit_reset(LED9_GPIO_Port, LED9_Pin);
+    gpio_bit_reset(LED10_GPIO_Port, LED10_Pin);
+    gpio_bit_reset(LED11_GPIO_Port, LED11_Pin);
+
+    timer_enable(TIMER1);
+    timer_enable(TIMER2);
 
 
     /* =========================== Configure Sensors GPIOs =========================== */
