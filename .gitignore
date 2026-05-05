@@ -10,3 +10,4 @@ MDK-ARM/*.uvgui.*
 !build/VARIANT_HOVERBOARD/firmware.hex
 !build/VARIANT_HOVERBOARD/firmware.bin
 !build/VARIANT_HOVERBOARD/firmware.elf
+.DS_Store
