@@ -99,7 +99,7 @@ void gpio_config(void) {
     gpio_af_set(LED2_GPIO_Port, GPIO_AF_1, LED2_Pin); 
     gpio_af_set(LED3_GPIO_Port, GPIO_AF_2, LED3_Pin);
 
-    rcu_periph_clock_enable(RCU_TIMER2);
+    rcu_periph_clock_enable(RCU_TIMER1);
     rcu_periph_clock_enable(RCU_TIMER2);
 
     // 4. Configure the Timer Base (The Frequency)
@@ -161,7 +161,7 @@ void gpio_config(void) {
     /* =========================== Configure I2C GPIOs =========================== */
     /* enable I2C clock */
     rcu_periph_clock_enable(RCU_GPIOB);
-      rcu_periph_clock_enable(MPU_RCU_I2C);
+    rcu_periph_clock_enable(MPU_RCU_I2C);
 
     /* connect PB6 to I2C_SCL and PB7 to I2C_SDA */
     gpio_af_set(MPU_SCL_GPIO_Port, GPIO_AF_1, MPU_SCL_Pin);
