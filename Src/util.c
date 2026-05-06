@@ -389,8 +389,13 @@ void handle_usart(void) {
  */
 void handle_leds(void) {
 
-    set_pwm_leds(255, 180, 40);
-
+    if(mpu.euler.pitch >=0) {
+        set_pwm_leds(0, 255, 0);
+    }
+    else if(mpu.euler.pitch < 0) {
+        set_pwm_leds(255, 0, 0);
+    }
+    
 }
 
 
