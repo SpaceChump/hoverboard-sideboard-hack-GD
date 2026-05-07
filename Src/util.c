@@ -388,14 +388,12 @@ void handle_usart(void) {
  * Handle of the sideboard LEDs
  */
 void handle_leds(void) {
-
-    if(mpu.euler.pitch >=0) {
-        set_pwm_leds(0, 255, 0);
+    if (mpu.euler.pitch >= 0) {
+        set_pwm_leds(255, 255, 255);
     }
-    else if(mpu.euler.pitch < 0) {
+    else if (mpu.euler.pitch < 0) {
         set_pwm_leds(255, 0, 0);
     }
-    
 }
 
 
