@@ -87,6 +87,7 @@ void handle_mpu6050(void);
 void handle_sensors(void);
 void handle_usart(void);
 void handle_leds(void);
+void handle_ctrl(void);
 
 /* usart1 read functions */
 void usart1_rx_check(void);

@@ -53,6 +53,7 @@ int main(void)
         handle_mpu6050();                               // Handle of the MPU-6050 IMU sensor
         //handle_sensors();                               // Handle of the optical sensors
         handle_usart();                                 // Handle of the USART data
+        handle_ctrl();                                  // Handle the control loop math
         handle_leds();                                  // Handle of the sideboard LEDs
 
         main_loop_counter++;

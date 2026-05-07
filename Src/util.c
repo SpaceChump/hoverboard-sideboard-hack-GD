@@ -388,12 +388,52 @@ void handle_usart(void) {
  * Handle of the sideboard LEDs
  */
 void handle_leds(void) {
-    if (mpu.euler.pitch >= 0) {
+    float theta = (float)mpu.euler.pitch / 100.0f + 3.0f;
+
+    if (theta >= 0) {
         set_pwm_leds(255, 255, 255);
     }
-    else if (mpu.euler.pitch < 0) {
+    else if (theta < 0) {
         set_pwm_leds(255, 0, 0);
     }
+}
+
+/*
+ * Handle of the Control Loop
+ */
+void handle_ctrl(void) {
+    // 1. Collect States
+    // Position
+    float x = 0.0f;
+
+    // Velocity
+    float avg_rpm = (float)(Feedback.speedL_meas - Feedback.speedR_meas) / 2.0f;
+    float x_dot = avg_rpm * 3.1415f * 0.2794f / 60.0f;
+
+    // Theta
+    float theta_true = (float)mpu.euler.pitch / 100.0f;
+    float theta = theta_true + 3.0f;
+
+    // Theta Dot
+    float theta_dot = (float)mpu.euler.pitch_rate / 100.0f;
+
+    // Input Calculation
+    /*
+    float K1 = 0.0;
+    float K2 = -29.9825;
+    float K3 = -10.8767;
+    float K4 = -2.4821;
+    */
+    float K1 = 0.0;
+    float K2 = -30.9794;
+    float K3 = -6.1981;
+    float K4 = -0.3645;
+    float Kt = 55.5/10;    // cmd units / torque units
+    float u = -1.0f * (K1*x + K2*x_dot + K3*theta + K4*theta_dot);
+    cmd1 = 0;
+    cmd2 = (int16_t)CLAMP(Kt*u, -100.0f, 100.0f);
+
+
 }
 
 
