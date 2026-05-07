@@ -35,7 +35,7 @@
 /* ==================================== DO NOT TOUCH SETTINGS ==================================== */
 #define MPU6500                               // [-] Define IMU sensor type
 #define MPU_GYRO_FSR              2000        // [deg/s] Set Gyroscope Full Scale Range: 250 deg/s, 500 deg/s, 1000 deg/s, 2000 deg/s. !! DMP sensor fusion works only with 2000 deg/s !!
-#define MPU_ACCEL_FSR             2           // [g] Set Acceleromenter Full Scale Range: 2g, 4g, 8g, 16g. !! DMP sensor fusion works only with 2g !!
+#define MPU_ACCEL_FSR             8           // [g] Set Acceleromenter Full Scale Range: 2g, 4g, 8g, 16g. !! DMP sensor fusion works only with 2g !!
 #define MPU_I2C_SPEED             400000      // [bit/s] Define I2C speed for communicating with the MPU6050
 #define DELAY_IN_MAIN_LOOP        1           // [ms] Delay in the main loop
 // #define PRINTF_FLOAT_SUPPORT                  // [-] Uncomment this for printf to support float on Serial Debug. It will increase code size! Better to avoid it!
@@ -43,7 +43,7 @@
 
 /* ==================================== SETTINGS MPU-6050 ==================================== */
 #define MPU_SENSOR_ENABLE                     // [-] Enable flag for MPU-6050 sensor. Comment-out this flag to Disable the MPU sensor and reduce code size.
-#define MPU_DMP_ENABLE                        // [-] Enable flag for MPU-6050 DMP (Digital Motion Processing) functionality.
+//#define MPU_DMP_ENABLE                        // [-] Enable flag for MPU-6050 DMP (Digital Motion Processing) functionality.
 #define MPU_DEFAULT_HZ            200          // [Hz] Default MPU frequecy: must be between 1Hz and 200Hz.
 #define TEMP_READ_MS              500         // [ms] Temperature read time interval
 #define PEDO_READ_MS              1000        // [ms] Pedometer read time interval

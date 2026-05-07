@@ -30,6 +30,7 @@
 #include "util.h"
 #include "mpu6050.h"
 #include "mpu6050_dmp.h"
+#include "imu_filter.h"
 
 
 /* The following functions must be defined for this platform:
@@ -3546,36 +3547,59 @@ void mpu_get_data(void)
         }
     } else if (hal.new_gyro) {
         short gyro[3], accel[3];
-        long temperature;
+        long temperature; 
         unsigned char sensors, more;
-        /* This function gets new data from the FIFO. The FIFO can contain
-            * gyro, accel, both, or neither. The sensors parameter tells the
-            * caller which data fields were actually populated with new data.
-            * For example, if sensors == INV_XYZ_GYRO, then the FIFO isn't
-            * being filled with accel data. The more parameter is non-zero if
-            * there are leftover packets in the FIFO. The HAL can use this
-            * information to increase the frequency at which this function is
-            * called.
-            */
+        
+        static unsigned long last_timestamp = 0; 
+        
         hal.new_gyro = 0;
         mpu_read_fifo(gyro, accel, &sensor_timestamp, &sensors, &more);
         if (more)
             hal.new_gyro = 1;
-        if (sensors & INV_XYZ_GYRO) {
-            mpu.gyro.x = gyro[0];
-            mpu.gyro.y = gyro[1];
-            mpu.gyro.z = gyro[2];
-            new_data = 1;
+
+        if ((sensors & INV_XYZ_GYRO) && (sensors & INV_XYZ_ACCEL)) {
+            
             if (new_temp) {
                 new_temp = 0;
                 mpu_get_temperature(&temperature, &sensor_timestamp);
-                mpu.temp = (int16_t)((temperature*100) >> 16);  // Convert temperature[q16] to temperature*100[degC]
+                mpu.temp = (int16_t)((temperature * 100) >> 16); 
             }
-        }
-        if (sensors & INV_XYZ_ACCEL) {
-            mpu.accel.x = accel[0];
-            mpu.accel.y = accel[1];
-            mpu.accel.z = accel[2];
+
+            short aligned_gyro[3], aligned_accel[3];
+            aligned_gyro[0]  = gyro[0]  * MPU_ORIENTATION[0] + gyro[1]  * MPU_ORIENTATION[1] + gyro[2]  * MPU_ORIENTATION[2];
+            aligned_gyro[1]  = gyro[0]  * MPU_ORIENTATION[3] + gyro[1]  * MPU_ORIENTATION[4] + gyro[2]  * MPU_ORIENTATION[5];
+            aligned_gyro[2]  = gyro[0]  * MPU_ORIENTATION[6] + gyro[1]  * MPU_ORIENTATION[7] + gyro[2]  * MPU_ORIENTATION[8];
+            
+            aligned_accel[0] = accel[0] * MPU_ORIENTATION[0] + accel[1] * MPU_ORIENTATION[1] + accel[2] * MPU_ORIENTATION[2];
+            aligned_accel[1] = accel[0] * MPU_ORIENTATION[3] + accel[1] * MPU_ORIENTATION[4] + accel[2] * MPU_ORIENTATION[5];
+            aligned_accel[2] = accel[0] * MPU_ORIENTATION[6] + accel[1] * MPU_ORIENTATION[7] + accel[2] * MPU_ORIENTATION[8];
+
+            mpu.gyro.x = aligned_gyro[0]; mpu.gyro.y = aligned_gyro[1]; mpu.gyro.z = aligned_gyro[2];
+            mpu.accel.x = aligned_accel[0]; mpu.accel.y = aligned_accel[1]; mpu.accel.z = aligned_accel[2];
+
+            float gx_rad = (float)aligned_gyro[0] * GYRO_RAW_TO_RADS; 
+            float gy_rad = (float)aligned_gyro[1] * GYRO_RAW_TO_RADS;
+            float gz_rad = (float)aligned_gyro[2] * GYRO_RAW_TO_RADS;
+
+            float ax_m = (float)aligned_accel[0] * ACCEL_RAW_TO_MS2; 
+            float ay_m = (float)aligned_accel[1] * ACCEL_RAW_TO_MS2;
+            float az_m = (float)aligned_accel[2] * ACCEL_RAW_TO_MS2;
+
+            float dt = (float)(sensor_timestamp - last_timestamp) * 0.001f;
+            
+            if (dt <= 0.0f || dt > 0.1f) {
+                dt = 1.0f / (float)MPU_DEFAULT_HZ;
+            }
+            last_timestamp = sensor_timestamp;
+
+            imu_filter_update(ax_m, ay_m, az_m, gx_rad, gy_rad, gz_rad, dt);
+
+            mpu.euler.roll  = (int16_t)(imu_state.roll  * 5729.58f);
+            mpu.euler.pitch = (int16_t)(imu_state.pitch * 5729.58f);
+            mpu.euler.yaw   = (int16_t)(imu_state.yaw   * 5729.58f);
+            
+            mpu.euler.pitch_rate = (int16_t)(imu_state.pitch_rate * 5729.58f);
+
             new_data = 1;
         }
     }
@@ -3641,7 +3665,10 @@ void mpu_read_accel_raw(void)
 void mpu_calc_euler_angles(void) {
     
     float w, x, y, z;
-    float yaw, pitch, roll;
+    float yaw, pitch, roll, pitch_rate;
+
+    static float pitch_prev = 0.0f;
+    static uint8_t first_run = 1;
 
     // Convert quaternions[q30] to quaternion[float]
     w = (float)mpu.quat.w / q30;        // q30 = 2^30
@@ -3651,14 +3678,28 @@ void mpu_calc_euler_angles(void) {
 
     // Calculate Euler angles: source <https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles>	
     roll    = atan2(2*(w*x + y*z), 1 - 2*(x*x + y*y));      // roll  (x-axis rotation)
-    pitch   = asin(2*(w*y - z*x));                          // pitch (y-axis rotation)
+    // --- CRITICAL SAFETY CLAMP ---
+    float q_pitch_val = 2.0f * (w*y - z*x);
+    if (q_pitch_val > 1.0f)  q_pitch_val = 1.0f;
+    if (q_pitch_val < -1.0f) q_pitch_val = -1.0f;
+    pitch = asin(q_pitch_val);                              // pitch (y-axis rotation)
     yaw     = atan2(2*(w*z + x*y), 1 - 2*(y*y + z*z));      // yaw   (z-axis rotation)
 
-    // Convert [rad] to [deg*100]
-    mpu.euler.roll  = (int16_t)(roll  * RAD2DEG * 100);
-    mpu.euler.pitch = (int16_t)(pitch * RAD2DEG * 100);
-    mpu.euler.yaw   = (int16_t)(yaw   * RAD2DEG * 100);
+    // Prevent massive derivative spike on the very first loop
+    if (first_run) {
+        pitch_prev = pitch;
+        first_run = 0;
+    }
+
+    pitch_rate = (pitch - pitch_prev) * (float)MPU_DEFAULT_HZ;
     
+    pitch_prev = pitch;
+
+    // Convert [rad] to [deg*100]
+    mpu.euler.roll  =       (int16_t)(roll      * RAD2DEG * 100);
+    mpu.euler.pitch =       (int16_t)(pitch     * RAD2DEG * 100);
+    mpu.euler.yaw   =       (int16_t)(yaw       * RAD2DEG * 100);
+    mpu.euler.pitch_rate =  (int16_t)(pitch_rate* RAD2DEG * 100);
 }
 
 

@@ -186,6 +186,7 @@ typedef struct{
     int16_t     roll;
     int16_t     pitch;
     int16_t     yaw;
+    int16_t     pitch_rate;
 } Euler;
 
 typedef struct {
@@ -196,4 +197,4 @@ typedef struct {
     int16_t     temp;
 } MPU_Data;
 
-#endif //  DEFINES_H 
+#endif //  DEFINES_H
