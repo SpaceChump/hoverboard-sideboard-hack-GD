@@ -1,6 +1,7 @@
 .pio/
 .pioenvs/
 .vscode/
+.DS_Store
 MDK-ARM/Listings/
 MDK-ARM/Objects/
 MDK-ARM/*.uvgui.*
