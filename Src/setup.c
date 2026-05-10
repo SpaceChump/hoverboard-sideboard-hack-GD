@@ -76,9 +76,9 @@ void gpio_config(void) {
     gpio_mode_set(LED7_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED7_Pin);
     gpio_mode_set(LED8_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED8_Pin);
     
-    gpio_mode_set(LED9_GPIO_Port, GPIO_MODE_AF, GPIO_PUPD_NONE, LED9_Pin);
-    gpio_mode_set(LED10_GPIO_Port, GPIO_MODE_AF, GPIO_PUPD_NONE, LED10_Pin);
-    gpio_mode_set(LED11_GPIO_Port, GPIO_MODE_AF, GPIO_PUPD_NONE, LED11_Pin);
+    gpio_mode_set(LED9_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED9_Pin);
+    gpio_mode_set(LED10_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED10_Pin);
+    gpio_mode_set(LED11_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, LED11_Pin);
 
     /* 3. Configure Output Options (Push-Pull, 50MHz High Speed) */
     gpio_output_options_set(LED1_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, LED1_Pin);
