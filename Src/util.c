@@ -388,13 +388,43 @@ void handle_usart(void) {
  * Handle of the sideboard LEDs
  */
 void handle_leds(void) {
+
+    // Battery Light
+    static float V = 4200.0;
+    V = (V * 0.99f) + (Feedback.batVoltage * 0.01f);
+
+    if (V > 3600) {
+        set_pwm_leds(0, 255, 0);
+    }
+    else if (V > 3350) {
+        set_pwm_leds(255, 45, 0);
+    }
+    else {
+        set_pwm_leds(255, 0, 0);
+    }
+    
+
+    // Headlights
     float theta = (float)mpu.euler.pitch / 100.0f + 3.0f;
 
     if (theta >= 0) {
-        set_pwm_leds(255, 255, 255);
+        gpio_bit_set(LED4_GPIO_Port, LED4_Pin);
+        gpio_bit_set(LED5_GPIO_Port, LED5_Pin);
+        gpio_bit_set(LED6_GPIO_Port, LED6_Pin);
+
+        gpio_bit_reset(LED9_GPIO_Port, LED9_Pin);
+        gpio_bit_reset(LED10_GPIO_Port, LED10_Pin);
+        gpio_bit_set(LED11_GPIO_Port, LED11_Pin);
+
     }
     else if (theta < 0) {
-        set_pwm_leds(255, 0, 0);
+        gpio_bit_set(LED4_GPIO_Port, LED4_Pin);
+        gpio_bit_reset(LED5_GPIO_Port, LED5_Pin);
+        gpio_bit_reset(LED6_GPIO_Port, LED6_Pin);
+
+        gpio_bit_set(LED9_GPIO_Port, LED9_Pin);
+        gpio_bit_set(LED10_GPIO_Port, LED10_Pin);
+        gpio_bit_set(LED11_GPIO_Port, LED11_Pin);
     }
 }
 
