@@ -149,14 +149,35 @@ void gpio_config(void) {
 
 
     /* =========================== Configure Sensors GPIOs =========================== */
-    /* enable the GPIO clock */
     rcu_periph_clock_enable(RCU_GPIOA);
     rcu_periph_clock_enable(RCU_GPIOC);
 
-    /* configure GPIO port */
-    gpio_mode_set(SENSOR1_GPIO_Port, GPIO_MODE_INPUT, GPIO_PUPD_NONE, SENSOR1_Pin);
-    gpio_mode_set(SENSOR2_GPIO_Port, GPIO_MODE_INPUT, GPIO_PUPD_NONE, SENSOR2_Pin);
+    gpio_mode_set(SENSOR1_GPIO_Port, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, SENSOR1_Pin);
+    gpio_mode_set(GPIOC, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, GPIO_PIN_14);
+    gpio_mode_set(SENSOR2_GPIO_Port, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, SENSOR2_Pin);
 
+    rcu_periph_clock_enable(RCU_ADC);                        
+    rcu_adc_clock_config(RCU_ADCCK_APB2_DIV6);     
+    
+    adc_special_function_config(ADC_SCAN_MODE, ENABLE);       // Keep Scan ON
+    adc_special_function_config(ADC_CONTINUOUS_MODE, DISABLE); // CHANGE THIS TO DISABLE
+    adc_data_alignment_config(ADC_DATAALIGN_RIGHT);
+
+    adc_channel_length_config(ADC_REGULAR_CHANNEL, 2);        // 2 Sensors
+    
+    // Load both channels into the hardware sequence
+    adc_regular_channel_config(0, SENSOR1_ADC_CH, ADC_SAMPLETIME_55POINT5);
+    adc_regular_channel_config(1, SENSOR2_ADC_CH, ADC_SAMPLETIME_55POINT5);
+
+    adc_external_trigger_config(ADC_REGULAR_CHANNEL, DISABLE); 
+    
+    adc_dma_mode_enable(); // Allow ADC to talk to DMA
+    
+    adc_enable();
+    delay_1ms(1);
+    
+    adc_calibration_enable();
+    while(0 != (ADC_CTL1 & ADC_CTL1_CLB)); // Safely wait for hardware bit
 
     /* =========================== Configure I2C GPIOs =========================== */
     /* enable I2C clock */
@@ -200,13 +221,13 @@ void gpio_config(void) {
     gpio_mode_set(AUX1_PU_GPIO_Port, GPIO_MODE_INPUT, GPIO_PUPD_NONE, AUX1_PU_Pin);
 
     /* configure GPIO port - outputs */
-    gpio_mode_set(AUX2_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, AUX2_Pin);
+    //gpio_mode_set(AUX2_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, AUX2_Pin);
     gpio_mode_set(AUX3_GPIO_Port, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, AUX3_Pin);
-    gpio_output_options_set(AUX2_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, AUX2_Pin);
+    //gpio_output_options_set(AUX2_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, AUX2_Pin);
     gpio_output_options_set(AUX3_GPIO_Port, GPIO_OTYPE_PP, GPIO_OSPEED_50MHZ, AUX3_Pin);
 
     /* reset GPIO pin */
-    gpio_bit_reset(AUX2_GPIO_Port, AUX2_Pin);
+    //gpio_bit_reset(AUX2_GPIO_Port, AUX2_Pin);
     gpio_bit_reset(AUX3_GPIO_Port, AUX3_Pin);
 
     #ifdef AUX45_USE_GPIO
@@ -363,6 +384,33 @@ void usart_Rx_DMA_config(uint32_t selUSART, uint8_t *pData, uint32_t dSize) {
     /* wait DMA channel transfer complete */
     // while (RESET == dma_flag_get(USART_RX_DMA[USART_ID], DMA_FLAG_FTF));	
 
+}
+
+void adc_DMA_config(uint16_t *pData, uint32_t dSize) {
+    dma_parameter_struct dma_init_struct;
+
+    /* enable DMA clock */
+    rcu_periph_clock_enable(RCU_DMA);
+
+    /* deinitialize DMA channel0 (ADC uses CH0 on GD32F1x0) */
+    dma_deinit(DMA_CH0);
+    dma_init_struct.direction           = DMA_PERIPHERAL_TO_MEMORY;
+    dma_init_struct.memory_addr         = (uint32_t)pData;
+    dma_init_struct.memory_inc          = DMA_MEMORY_INCREASE_ENABLE;
+    dma_init_struct.memory_width        = DMA_MEMORY_WIDTH_16BIT;
+    dma_init_struct.number              = dSize;
+    dma_init_struct.periph_addr         = ADC_RDATA_ADDRESS;
+    dma_init_struct.periph_inc          = DMA_PERIPH_INCREASE_DISABLE;
+    dma_init_struct.periph_width        = DMA_PERIPHERAL_WIDTH_16BIT;
+    dma_init_struct.priority            = DMA_PRIORITY_ULTRA_HIGH;
+    dma_init(DMA_CH0, dma_init_struct);
+
+    /* configure DMA mode */
+    dma_circulation_enable(DMA_CH0);
+    dma_memory_to_memory_disable(DMA_CH0);
+
+    /* enable DMA channel */
+    dma_channel_enable(DMA_CH0);
 }
 
 

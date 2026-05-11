@@ -79,9 +79,15 @@
 
 /* =========================== Defines SENSORS =========================== */
 #define SENSOR1_GPIO_Port           GPIOA
-#define SENSOR1_Pin                 GPIO_PIN_4
-#define SENSOR2_GPIO_Port           GPIOC
-#define SENSOR2_Pin                 GPIO_PIN_14
+#define SENSOR1_Pin                 GPIO_PIN_1     // Optical Pad 1
+#define SENSOR1_ADC_CH              ADC_CHANNEL_1
+
+#define SENSOR2_GPIO_Port           GPIOA
+#define SENSOR2_Pin                 GPIO_PIN_4     // Hijacked AUX2 Pad
+#define SENSOR2_ADC_CH              ADC_CHANNEL_4
+
+#define ADC_RDATA_ADDRESS           ((uint32_t)0x4001244C)
+
 
 
 /* =========================== Defines USART =========================== */

@@ -28,6 +28,7 @@
 #include "util.h"
 #include "mpu6050.h"
 
+
 // USART1 variables
 #ifdef SERIAL_CONTROL
 static SerialSideboard Sideboard;
@@ -68,6 +69,8 @@ extern uint8_t  print_aux;
   static uint16_t ibus_captured_value[IBUS_NUM_CHANNELS];
   #endif
 #endif
+
+static volatile uint16_t adc_buffer[2] = {4095, 4095};
 
 #if (defined(SERIAL_AUX_RX) && defined(CONTROL_IBUS)) || defined(SERIAL_CONTROL)
 static int16_t  cmd1, cmd2;
@@ -219,6 +222,9 @@ void input_init(void) {
         usart_Rx_DMA_config(USART_AUX, (uint8_t *)rx0_buffer, sizeof(rx0_buffer));
     #endif
 
+    adc_DMA_config((uint16_t *)adc_buffer, 2);
+    adc_software_trigger_enable(ADC_REGULAR_CHANNEL); 
+
     intro_demo_led(100);                                // Short LEDs intro demo with 100 ms delay. This also gives some time for the MPU-6050 to power-up.	
 
     #ifdef MPU_SENSOR_ENABLE
@@ -266,32 +272,48 @@ void handle_mpu6050(void) {
  * Handle of the optical sensors
  */
 void handle_sensors(void) {
-    sensor1_read = gpio_input_bit_get(SENSOR1_GPIO_Port, SENSOR1_Pin);
-    sensor2_read = gpio_input_bit_get(SENSOR2_GPIO_Port, SENSOR2_Pin);
+    uint16_t THRESH_ON = 800;
+    uint16_t THRESH_OFF = 1000; 
+    
+    adc_software_trigger_enable(ADC_REGULAR_CHANNEL); 
+    
+    uint16_t sensor1_val, sensor2_val;
+    
+    // The DMA instantly routes the background data to the correct sensor variable
+    if (SENSOR1_ADC_CH < SENSOR2_ADC_CH) {
+        sensor1_val = adc_buffer[0];
+        sensor2_val = adc_buffer[1];
+    } else {
+        sensor1_val = adc_buffer[1];
+        sensor2_val = adc_buffer[0];
+    }
 
-    // SENSOR1
+    // --- Your existing logic remains exactly the same below ---
+    if (sensor1 == RESET && sensor1_val < THRESH_ON) {
+        sensor1_read = SET; // Valid press
+    } else if(sensor1 == SET && sensor1_val > THRESH_OFF) {
+        sensor1_read = RESET; // Valid release
+    }
+
+    if (sensor2 == RESET && sensor2_val < THRESH_ON) {
+        sensor2_read = SET; // Valid press
+    } else if(sensor2 == SET && sensor2_val > THRESH_OFF) {
+        sensor2_read = RESET; // Valid release
+    }   
+
     if (sensor1 == RESET && sensor1_read == SET) {
-        // Sensor ACTIVE: Do something here (one time task on activation)
         sensor1 = SET;
-        gpio_bit_set(LED4_GPIO_Port, LED4_Pin);
         consoleLog("SENSOR 1 ON\r\n");
     } else if(sensor1 == SET && sensor1_read == RESET) {
-        // Sensor DEACTIVE: Do something here (one time task on deactivation)
         sensor1 = RESET;
-        gpio_bit_reset(LED4_GPIO_Port, LED4_Pin);
         consoleLog("SENSOR 1 OFF\r\n");
     }
 
-    // SENSOR2
     if (sensor2 == RESET && sensor2_read == SET) {
-        // Sensor ACTIVE: Do something here (one time task on activation)
         sensor2 = SET;
-        gpio_bit_set(LED5_GPIO_Port, LED5_Pin);
         consoleLog("SENSOR 2 ON\r\n");
     } else if (sensor2 == SET && sensor2_read == RESET) {
-        // Sensor DEACTIVE: Do something here (one time task on deactivation)
         sensor2 = RESET;
-        gpio_bit_reset(LED5_GPIO_Port, LED5_Pin);
         consoleLog("SENSOR 2 OFF\r\n");
     }
 
@@ -432,36 +454,58 @@ void handle_leds(void) {
  * Handle of the Control Loop
  */
 void handle_ctrl(void) {
-    // 1. Collect States
-    // Position
-    float x = 0.0f;
+    unsigned long current_time;
+    get_tick_count_ms(&current_time);
 
-    // Velocity
-    float avg_rpm = (float)(Feedback.speedL_meas - Feedback.speedR_meas) / 2.0f;
-    float x_dot = avg_rpm * 3.1415f * 0.2794f / 60.0f;
+    static unsigned long last_ctrl_time = 0;
+    if (current_time - last_ctrl_time < 10) {
+        return; // Exit if 10ms haven't passed yet
+    }
+    last_ctrl_time = current_time;
 
-    // Theta
-    float theta_true = (float)mpu.euler.pitch / 100.0f;
-    float theta = theta_true + 3.0f;
+    if (sensor1 == SET || sensor2 == SET) {
+        // 1. Collect States
+        // Position
+        float x = 0.0f;
 
-    // Theta Dot
-    float theta_dot = (float)mpu.euler.pitch_rate / 100.0f;
+        // Velocity
+        float avg_rpm = (float)(Feedback.speedL_meas - Feedback.speedR_meas) / 2.0f;
+        float x_dot = avg_rpm * 3.1415f * 0.2794f / 60.0f;
 
-    // Input Calculation
-    /*
-    float K1 = 0.0;
-    float K2 = -29.9825;
-    float K3 = -10.8767;
-    float K4 = -2.4821;
-    */
-    float K1 = 0.0;
-    float K2 = -30.9794;
-    float K3 = -6.1981;
-    float K4 = -0.3645;
-    float Kt = 55.5/10;    // cmd units / torque units
-    float u = -1.0f * (K1*x + K2*x_dot + K3*theta + K4*theta_dot);
-    cmd1 = 0;
-    cmd2 = (int16_t)CLAMP(Kt*u, -100.0f, 100.0f);
+        // Theta
+        float theta_true = (float)mpu.euler.pitch / 100.0f;
+        float theta = theta_true + 3.0f;
+
+        // Theta Dot
+        float theta_dot = (float)mpu.euler.pitch_rate / 100.0f;
+
+        // Input Calculation
+        float K1 = 0.0;
+        float K2 = -41.1580;
+        float K3 = -10.9671;
+        float K4 = -2.8590;
+        
+        /*
+        float K1 = 0.0;
+        float K2 = -29.9825;
+        float K3 = -10.8767;
+        float K4 = -2.4821;
+        */
+        /*
+        float K1 = 0.0;
+        float K2 = -30.9794;
+        float K3 = -6.1981;
+        float K4 = -0.3645;
+        */
+        float Kt = 1000.0/30.0;    // cmd units / torque units
+        float u = -1.0f * (K1*x + K2*x_dot + K3*theta + K4*theta_dot);
+        cmd1 = 0;
+        cmd2 = (int16_t)CLAMP(Kt*u, -1000.0f, 1000.0f);
+    }
+    else {
+        cmd1 = 0;
+        cmd2 = 0;
+    }
 
 
 }
