@@ -273,7 +273,7 @@ void handle_mpu6050(void) {
  */
 void handle_sensors(void) {
     uint16_t THRESH_ON = 800;
-    uint16_t THRESH_OFF = 1000; 
+    uint16_t THRESH_OFF = 2000; 
     
     adc_software_trigger_enable(ADC_REGULAR_CHANNEL); 
     
@@ -481,9 +481,9 @@ void handle_ctrl(void) {
 
         // Input Calculation
         float K1 = 0.0;
-        float K2 = -41.1580;
-        float K3 = -10.9671;
-        float K4 = -2.8590;
+        float K2 = -6.1526;
+        float K3 = -3.6737;
+        float K4 = -1.3059;
         
         /*
         float K1 = 0.0;

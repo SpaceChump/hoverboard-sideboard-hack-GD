@@ -153,7 +153,6 @@ void gpio_config(void) {
     rcu_periph_clock_enable(RCU_GPIOC);
 
     gpio_mode_set(SENSOR1_GPIO_Port, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, SENSOR1_Pin);
-    gpio_mode_set(GPIOC, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, GPIO_PIN_14);
     gpio_mode_set(SENSOR2_GPIO_Port, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, SENSOR2_Pin);
 
     rcu_periph_clock_enable(RCU_ADC);                        
