@@ -54,13 +54,27 @@ typedef struct{
 #ifdef SERIAL_AUX_TX
 typedef struct{
   uint16_t  start;
-  int16_t   signal1;
-  int16_t   signal2;
+  int16_t   pitch;
+  int16_t   pitch_rate;
+  int16_t   batVoltage;
+  int16_t   speed;
+  int16_t   cmd1;
+  int16_t   cmd2;
+  int16_t   sens1;
+  int16_t   sens2;
   uint16_t  checksum;
 } SerialAuxTx;
 #endif
 /* Rx structure USART AUX */
 #ifdef SERIAL_AUX_RX
+  typedef struct{
+    uint16_t  start;
+    int16_t   k1;
+    int16_t   k2;
+    int16_t   k3;
+    int16_t   k4;
+    uint16_t  checksum;
+  } SerialAuxRx;
   #ifdef CONTROL_IBUS
   typedef struct{
     uint8_t  start;
@@ -102,7 +116,7 @@ void usart_process_data(SerialFeedback *Feedback_in, SerialFeedback *Feedback_ou
 /* usart0 read functions */
 void usart0_rx_check(void);
 #ifdef SERIAL_AUX_RX
-void usart_process_command(SerialCommand *command_in, SerialCommand *command_out);
+void usart_process_aux_rx(SerialAuxRx *rx_in, SerialAuxRx *rx_out); // <--- Updated Prototype
 #endif
 
 /* AUX Serial Print data */

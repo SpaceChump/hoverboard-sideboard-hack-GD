@@ -92,7 +92,8 @@
 #ifdef VARIANT_ONEWHEEL
   #define SERIAL_CONTROL                      // [-] Define for Serial Control via the serial port
   #define SERIAL_FEEDBACK                     // [-] Define for Serial Feedback via the serial port
-
+  #define SERIAL_AUX_TX
+  #define SERIAL_AUX_RX
   // Control Scheme (select only one)
   #define CTRL_SCHEME_LQR
   //#define CTRL_SCHEME_MANUAL
