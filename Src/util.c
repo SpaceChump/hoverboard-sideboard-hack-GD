@@ -53,10 +53,23 @@ static SerialAuxTx AuxTx;
 #endif
 
 #ifdef SERIAL_AUX_RX
-static uint8_t  rx0_buffer[SERIAL_BUFFER_SIZE]; // USART Rx DMA circular buffer
+static uint8_t  rx0_buffer[SERIAL_BUFFER_SIZE]; 
 static uint32_t rx0_buffer_len = ARRAY_LEN(rx0_buffer);
+
+static SerialAuxRx auxRx;
+static SerialAuxRx auxRx_raw;
+static uint16_t timeoutCntSerial0  = 0;         
+static uint8_t  timeoutFlagSerial0 = 0;         
+static uint32_t auxRx_len = sizeof(auxRx);
+
+// GLOBAL ACTIVE GAINS (Initialized to your current safe defaults)
+float K1 = 0.0f;
+float K2 = -6.1526f;
+float K3 = -3.6737f;
+float K4 = -1.3059f;
 #endif
 
+/*
 #ifdef SERIAL_AUX_RX
 static SerialCommand command;
 static SerialCommand command_raw;
@@ -69,6 +82,7 @@ extern uint8_t  print_aux;
   static uint16_t ibus_captured_value[IBUS_NUM_CHANNELS];
   #endif
 #endif
+*/
 
 static volatile uint16_t adc_buffer[2] = {4095, 4095};
 
@@ -360,10 +374,17 @@ void handle_usart(void) {
     // Tx USART AUX
     #ifdef SERIAL_AUX_TX
         if (main_loop_counter % 5 == 0 && dma_transfer_number_get(USART0_TX_DMA_CH) == 0) {     // Check if DMA channel counter is 0 (meaning all data has been transferred)
+            
             AuxTx.start     = (uint16_t)SERIAL_START_FRAME;
-            AuxTx.signal1   = (int16_t)sensor1;
-            AuxTx.signal2   = (int16_t)sensor2;
-            AuxTx.checksum  = (uint16_t)(AuxTx.start ^ AuxTx.signal1 ^ AuxTx.signal2);
+            AuxTx.pitch   = (int16_t)mpu.euler.pitch;
+            AuxTx.pitch_rate   = (int16_t)mpu.euler.pitch_rate;
+            AuxTx.batVoltage   = (int16_t)Feedback.batVoltage;
+            AuxTx.speed   = (int16_t)((Feedback.speedL_meas - Feedback.speedR_meas) / 2.0f);
+            AuxTx.cmd1   = (int16_t)cmd1;
+            AuxTx.cmd2   = (int16_t)cmd2;
+            AuxTx.sens1   = (int16_t)sensor1;
+            AuxTx.sens2   = (int16_t)sensor2;
+            AuxTx.checksum  = (uint16_t)(AuxTx.start ^ AuxTx.pitch ^ AuxTx.pitch_rate ^ AuxTx.batVoltage ^ AuxTx.speed ^ AuxTx.cmd1 ^ AuxTx.cmd2 ^ AuxTx.sens1 ^ AuxTx.sens2);
         
             dma_channel_disable(USART0_TX_DMA_CH);
             DMA_CHCNT(USART0_TX_DMA_CH)     = sizeof(AuxTx);
@@ -386,16 +407,19 @@ void handle_usart(void) {
                                      switch_check(ibus_captured_value[9],0) << 5);      // Channel 10
         }
         #endif
-
+        
+        #ifdef CONTROL_IBUS
         if (timeoutCntSerial0++ >= SERIAL_TIMEOUT) {                // Timeout qualification
             timeoutFlagSerial0 = 1;                                 // Timeout detected
             timeoutCntSerial0  = SERIAL_TIMEOUT;                    // Limit timout counter value
             cmd1 = cmd2 = 0;                                        // Set commands to 0
             cmdSwitch &= ~(1U << 0);                                // Clear Bit 0, to switch to default control input
         }
+
         // if (timeoutFlagSerial0 && main_loop_counter % 100 == 0) {   // In case of timeout bring the system to a Safe State and indicate error if desired
         //     toggle_led(LED2_GPIO_Port, LED2_Pin);                   // Toggle the Green LED every 100 ms
         // }
+        #endif
 
         #ifdef SERIAL_DEBUG
             // Print MPU data to Console
@@ -478,25 +502,7 @@ void handle_ctrl(void) {
 
         // Theta Dot
         float theta_dot = (float)mpu.euler.pitch_rate / 100.0f;
-
-        // Input Calculation
-        float K1 = 0.0;
-        float K2 = -6.1526;
-        float K3 = -3.6737;
-        float K4 = -1.3059;
         
-        /*
-        float K1 = 0.0;
-        float K2 = -29.9825;
-        float K3 = -10.8767;
-        float K4 = -2.4821;
-        */
-        /*
-        float K1 = 0.0;
-        float K2 = -30.9794;
-        float K3 = -6.1981;
-        float K4 = -0.3645;
-        */
         float Kt = 1000.0/30.0;    // cmd units / torque units
         float u = -1.0f * (K1*x + K2*x_dot + K3*theta + K4*theta_dot);
         cmd1 = 0;
@@ -601,10 +607,6 @@ void usart_process_data(SerialFeedback *Feedback_in, SerialFeedback *Feedback_ou
 
 /* =========================== USART0 READ Functions =========================== */
 
-/*
- * Check for new data received on USART with DMA: refactored function from https://github.com/MaJerle/stm32-usart-uart-dma-rx-tx
- * - this function is called for every USART IDLE line detection, in the USART interrupt handler
- */
 void usart0_rx_check(void)
 {
     #ifdef SERIAL_AUX_RX
@@ -612,48 +614,48 @@ void usart0_rx_check(void)
     uint32_t pos;
     uint8_t *ptr;
 
-    pos = rx0_buffer_len - dma_transfer_number_get(USART0_RX_DMA_CH);           // Calculate current position in buffer
-    if (pos != old_pos) {                                                       // Check change in received data
-        ptr = (uint8_t *)&command_raw;                                          // Initialize the pointer with structure address
-        if (pos > old_pos && (pos - old_pos) == command_len) {                  // "Linear" buffer mode: check if current position is over previous one AND data length equals expected length
-            memcpy(ptr, &rx0_buffer[old_pos], command_len);                     // Copy data. This is possible only if structure is contiguous! (meaning all the structure members have the same size)
-            usart_process_command(&command_raw, &command);                      // Process data
-        } else if ((rx0_buffer_len - old_pos + pos) == command_len) {           // "Overflow" buffer mode: check if data length equals expected length
-            memcpy(ptr, &rx0_buffer[old_pos], rx0_buffer_len - old_pos);        // First copy data from the end of buffer
-            if (pos > 0) {                                                      // Check and continue with beginning of buffer
-                ptr += rx0_buffer_len - old_pos;                                // Update position
-                memcpy(ptr, &rx0_buffer[0], pos);                               // Copy remaining data
+    pos = rx0_buffer_len - dma_transfer_number_get(USART0_RX_DMA_CH);           
+    if (pos != old_pos) {                                                       
+        ptr = (uint8_t *)&auxRx_raw;                                          
+        if (pos > old_pos && (pos - old_pos) == auxRx_len) {                  
+            memcpy(ptr, &rx0_buffer[old_pos], auxRx_len);                     
+            usart_process_aux_rx(&auxRx_raw, &auxRx);                      
+        } else if ((rx0_buffer_len - old_pos + pos) == auxRx_len) {           
+            memcpy(ptr, &rx0_buffer[old_pos], rx0_buffer_len - old_pos);        
+            if (pos > 0) {                                                      
+                ptr += rx0_buffer_len - old_pos;                                
+                memcpy(ptr, &rx0_buffer[0], pos);                               
             }
-            usart_process_command(&command_raw, &command);                      // Process data
+            usart_process_aux_rx(&auxRx_raw, &auxRx);                      
         }
     }
-    old_pos = pos;                                                              // Updated old position
-    if (old_pos == rx0_buffer_len) {                                            // Check and manually update if we reached end of buffer
+    old_pos = pos;                                                              
+    if (old_pos == rx0_buffer_len) {                                            
         old_pos = 0;
     }
-    #endif  // SERIAL_AUX_RX
+    #endif  
 }
 
-/*
- * Process command UART0 Rx data
- * - if the command_in data is valid (correct START_FRAME and checksum) copy the command_in to command_out
- */
 #ifdef SERIAL_AUX_RX
-void usart_process_command(SerialCommand *command_in, SerialCommand *command_out)
+void usart_process_aux_rx(SerialAuxRx *rx_in, SerialAuxRx *rx_out)
 {
-  #ifdef CONTROL_IBUS
-    if (command_in->start == IBUS_LENGTH && command_in->type == IBUS_COMMAND) {
-      ibus_chksum = 0xFFFF - IBUS_LENGTH - IBUS_COMMAND;
-      for (uint8_t i = 0; i < (IBUS_NUM_CHANNELS * 2); i++) {
-        ibus_chksum -= command_in->channels[i];
-      }
-      if (ibus_chksum == (uint16_t)((command_in->checksumh << 8) + command_in->checksuml)) {
-        *command_out = *command_in;
-        timeoutCntSerial0  = 0;        // Reset timeout counter
-        timeoutFlagSerial0 = 0;        // Clear timeout flag
-      }
+    uint16_t checksum;
+    if (rx_in->start == SERIAL_START_FRAME) {
+        // Exact same architecture as your outgoing telemetry!
+        checksum = (uint16_t)(rx_in->start ^ rx_in->k1 ^ rx_in->k2 ^ rx_in->k3 ^ rx_in->k4);
+        
+        if (rx_in->checksum == checksum) {
+            *rx_out = *rx_in;
+            timeoutCntSerial0  = 0;        
+            timeoutFlagSerial0 = 0;        
+
+            // UPDATE THE LIVE GAINS (Divide by 1000 to restore floats)
+            K1 = (float)rx_out->k1 / 1000.0f;
+            K2 = (float)rx_out->k2 / 1000.0f;
+            K3 = (float)rx_out->k3 / 1000.0f;
+            K4 = (float)rx_out->k4 / 1000.0f;
+        }
     }
-  #endif
 }
 #endif
 
