@@ -271,7 +271,7 @@ void usart_config(uint32_t selUSART, uint32_t selBaudRate) {
     gpio_output_options_set(USART_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_10MHZ, USART_TX_PIN[USART_ID]);
 
     /* configure USART Rx as alternate function push-pull */
-    gpio_mode_set(USART_GPIO_PORT, GPIO_MODE_AF, GPIO_PUPD_PULLUP, USART_RX_PIN[USART_ID]);
+    gpio_mode_set(USART_GPIO_PORT, GPIO_MODE_AF, GPIO_PUPD_NONE, USART_RX_PIN[USART_ID]);
     gpio_output_options_set(USART_GPIO_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_10MHZ, USART_RX_PIN[USART_ID]);
 
     /* USART configure */
