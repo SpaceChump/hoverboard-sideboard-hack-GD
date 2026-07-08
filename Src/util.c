@@ -651,7 +651,7 @@ void usart0_rx_check(void)
         
         // 1. Sync check (assuming SERIAL_START_FRAME is 0xABCD)
         if (index >= 2) {
-            if (buffer[0] != 0xAB || buffer[1] != 0xCD) {
+            if (buffer[0] != 0xCD || buffer[1] != 0xAB) { // <--- FLIPPED HERE
                 buffer[0] = buffer[1];
                 index = 1;
             }

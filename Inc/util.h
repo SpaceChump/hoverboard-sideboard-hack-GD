@@ -54,7 +54,7 @@ typedef struct{
 #ifdef SERIAL_AUX_TX
 typedef struct{
   uint16_t  start;
-  uint8_t   type;
+  uint16_t   type;
   int16_t   pitch;
   int16_t   pitch_rate;
   int16_t   speed;
@@ -67,7 +67,7 @@ typedef struct{
 
 typedef struct{
   uint16_t  start;
-  uint8_t   type;
+  uint16_t   type;
   int16_t   sens1;
   int16_t   sens2;
   uint16_t  checksum;
@@ -78,7 +78,7 @@ typedef struct{
 #ifdef SERIAL_AUX_RX
   typedef struct{
     uint16_t  start;
-    uint8_t   type;
+    uint16_t   type;
     int16_t   k1;
     int16_t   k2;
     int16_t   k3;
@@ -90,7 +90,7 @@ typedef struct{
   
   typedef struct{
     uint16_t  start;
-    uint8_t   type;
+    uint16_t   type;
     uint8_t   brightness;
     uint8_t   mode;
     uint16_t  checksum;
