@@ -49,20 +49,27 @@ static uint32_t Feedback_len  = sizeof(Feedback);
 
 // USART0 variables
 #ifdef SERIAL_AUX_TX
-static SerialAuxTx AuxTx;
+static SerialAuxTx_Fast AuxTx_Fast;
+static SerialAuxTx_Slow AuxTx_Slow;
+static uint8_t aux_telemetry_counter = 0;
 #endif
 
 #ifdef SERIAL_AUX_RX
 static uint8_t  rx0_buffer[SERIAL_BUFFER_SIZE]; 
 static uint32_t rx0_buffer_len = ARRAY_LEN(rx0_buffer);
 
-static SerialAuxRx auxRx;
-static SerialAuxRx auxRx_raw;
+// LED State variables
+uint8_t cmdLedBrightness = 0;
+uint8_t cmdLedMode       = 0;
+
+// Footpad Thresholds (Remove these from inside handle_sensors!)
+uint16_t THRESH_ON = 3800;
+uint16_t THRESH_OFF = 3900;
+
 static uint16_t timeoutCntSerial0  = 0;         
 static uint8_t  timeoutFlagSerial0 = 0;         
-static uint32_t auxRx_len = sizeof(auxRx);
 
-// GLOBAL ACTIVE GAINS (Initialized to your current safe defaults)
+// GLOBAL ACTIVE GAINS
 float K1 = 0.0f;
 float K2 = -6.1526f;
 float K3 = -3.6737f;
@@ -230,7 +237,7 @@ void input_init(void) {
         usart_Rx_DMA_config(USART_MAIN, (uint8_t *)rx1_buffer, sizeof(rx1_buffer));
     #endif
     #ifdef SERIAL_AUX_TX
-        usart_Tx_DMA_config(USART_AUX, (uint8_t *)&AuxTx, sizeof(AuxTx));
+        usart_Tx_DMA_config(USART_AUX, (uint8_t *)&AuxTx_Fast, sizeof(AuxTx_Fast));
     #endif
     #ifdef SERIAL_AUX_RX
         usart_Rx_DMA_config(USART_AUX, (uint8_t *)rx0_buffer, sizeof(rx0_buffer));
@@ -286,8 +293,6 @@ void handle_mpu6050(void) {
  * Handle of the optical sensors
  */
 void handle_sensors(void) {
-    uint16_t THRESH_ON = 800;
-    uint16_t THRESH_OFF = 2000; 
     
     adc_software_trigger_enable(ADC_REGULAR_CHANNEL); 
     
@@ -373,23 +378,46 @@ void handle_usart(void) {
 
     // Tx USART AUX
     #ifdef SERIAL_AUX_TX
-        if (main_loop_counter % 5 == 0 && dma_transfer_number_get(USART0_TX_DMA_CH) == 0) {     // Check if DMA channel counter is 0 (meaning all data has been transferred)
+        if (main_loop_counter % 5 == 0 && dma_transfer_number_get(USART0_TX_DMA_CH) == 0) {     
             
-            AuxTx.start     = (uint16_t)SERIAL_START_FRAME;
-            AuxTx.pitch   = (int16_t)mpu.euler.pitch;
-            AuxTx.pitch_rate   = (int16_t)mpu.euler.pitch_rate;
-            AuxTx.batVoltage   = (int16_t)Feedback.batVoltage;
-            AuxTx.speed   = (int16_t)((Feedback.speedL_meas - Feedback.speedR_meas) / 2.0f);
-            AuxTx.cmd1   = (int16_t)cmd1;
-            AuxTx.cmd2   = (int16_t)cmd2;
-            AuxTx.sens1   = (int16_t)sensor1;
-            AuxTx.sens2   = (int16_t)sensor2;
-            AuxTx.checksum  = (uint16_t)(AuxTx.start ^ AuxTx.pitch ^ AuxTx.pitch_rate ^ AuxTx.batVoltage ^ AuxTx.speed ^ AuxTx.cmd1 ^ AuxTx.cmd2 ^ AuxTx.sens1 ^ AuxTx.sens2);
-        
-            dma_channel_disable(USART0_TX_DMA_CH);
-            DMA_CHCNT(USART0_TX_DMA_CH)     = sizeof(AuxTx);
-            DMA_CHMADDR(USART0_TX_DMA_CH)   = (uint32_t)&AuxTx;
-            dma_channel_enable(USART0_TX_DMA_CH);
+            aux_telemetry_counter++;
+            if (aux_telemetry_counter >= 20) {
+                // --- SEND SLOW PACKET (Every ~20th loop) ---
+                aux_telemetry_counter = 0;
+                
+                AuxTx_Slow.start      = (uint16_t)SERIAL_START_FRAME;
+                AuxTx_Slow.type       = 2;
+                AuxTx_Slow.sens1      = (int16_t)sensor1;
+                AuxTx_Slow.sens2      = (int16_t)sensor2;
+                
+                // XOR Checksum matching the original code style
+                AuxTx_Slow.checksum = (uint16_t)(AuxTx_Slow.start ^ AuxTx_Slow.type ^ AuxTx_Slow.sens1 ^ AuxTx_Slow.sens2);
+                
+                dma_channel_disable(USART0_TX_DMA_CH);
+                DMA_CHCNT(USART0_TX_DMA_CH)     = sizeof(SerialAuxTx_Slow);
+                DMA_CHMADDR(USART0_TX_DMA_CH)   = (uint32_t)&AuxTx_Slow;
+                dma_channel_enable(USART0_TX_DMA_CH);
+            } else {
+                // --- SEND FAST PACKET ---
+                AuxTx_Fast.start      = (uint16_t)SERIAL_START_FRAME;
+                AuxTx_Fast.type       = 1;
+                AuxTx_Fast.pitch      = (int16_t)mpu.euler.pitch;
+                AuxTx_Fast.pitch_rate = (int16_t)mpu.euler.pitch_rate;
+                AuxTx_Fast.speed      = (int16_t)((Feedback.speedL_meas - Feedback.speedR_meas) / 2.0f);
+                AuxTx_Fast.cmd2       = (int16_t)cmd2;
+                AuxTx_Fast.adc_pad1   = (int16_t)adc_buffer[0];
+                AuxTx_Fast.adc_pad2   = (int16_t)adc_buffer[1];
+                AuxTx_Fast.batVoltage = (int16_t)Feedback.batVoltage;
+
+                
+                // XOR Checksum
+                AuxTx_Fast.checksum = (uint16_t)(AuxTx_Fast.start ^ AuxTx_Fast.type ^ AuxTx_Fast.pitch ^ AuxTx_Fast.pitch_rate ^ AuxTx_Fast.speed ^ AuxTx_Fast.cmd2 ^ AuxTx_Fast.adc_pad1 ^ AuxTx_Fast.adc_pad2 ^ AuxTx_Fast.batVoltage);
+            
+                dma_channel_disable(USART0_TX_DMA_CH);
+                DMA_CHCNT(USART0_TX_DMA_CH)     = sizeof(SerialAuxTx_Fast);
+                DMA_CHMADDR(USART0_TX_DMA_CH)   = (uint32_t)&AuxTx_Fast;
+                dma_channel_enable(USART0_TX_DMA_CH);
+            }
         }
     #endif
     // Rx USART AUX
@@ -487,7 +515,7 @@ void handle_ctrl(void) {
     }
     last_ctrl_time = current_time;
 
-    if (sensor1 == SET || sensor2 == SET) {
+    if (sensor1 == SET && sensor2 == SET) {
         // 1. Collect States
         // Position
         float x = 0.0f;
@@ -612,48 +640,91 @@ void usart0_rx_check(void)
     #ifdef SERIAL_AUX_RX
     static uint32_t old_pos;
     uint32_t pos;
-    uint8_t *ptr;
-
+    static uint8_t buffer[64];
+    static uint8_t index = 0;
+    
+    // Check how far the DMA has advanced the circular buffer
     pos = rx0_buffer_len - dma_transfer_number_get(USART0_RX_DMA_CH);           
-    if (pos != old_pos) {                                                       
-        ptr = (uint8_t *)&auxRx_raw;                                          
-        if (pos > old_pos && (pos - old_pos) == auxRx_len) {                  
-            memcpy(ptr, &rx0_buffer[old_pos], auxRx_len);                     
-            usart_process_aux_rx(&auxRx_raw, &auxRx);                      
-        } else if ((rx0_buffer_len - old_pos + pos) == auxRx_len) {           
-            memcpy(ptr, &rx0_buffer[old_pos], rx0_buffer_len - old_pos);        
-            if (pos > 0) {                                                      
-                ptr += rx0_buffer_len - old_pos;                                
-                memcpy(ptr, &rx0_buffer[0], pos);                               
+    
+    while (old_pos != pos) {
+        buffer[index++] = rx0_buffer[old_pos];
+        
+        // 1. Sync check (assuming SERIAL_START_FRAME is 0xABCD)
+        if (index >= 2) {
+            if (buffer[0] != 0xAB || buffer[1] != 0xCD) {
+                buffer[0] = buffer[1];
+                index = 1;
             }
-            usart_process_aux_rx(&auxRx_raw, &auxRx);                      
         }
-    }
-    old_pos = pos;                                                              
-    if (old_pos == rx0_buffer_len) {                                            
-        old_pos = 0;
+        
+        // 2. Check type and length
+        if (index >= 3) {
+            uint8_t packet_type = buffer[2];
+            uint8_t expected_length = 0;
+            
+            if (packet_type == 0) {
+                expected_length = sizeof(SerialAuxRx_Tune);
+            } else if (packet_type == 3) {
+                expected_length = sizeof(SerialAuxRx_LED);
+            } else {
+                index = 0; // Bad type, discard
+            }
+            
+            // 3. Process packet if length is matched
+            if (index > 0 && index == expected_length) {
+                usart_process_aux_rx(buffer, packet_type);
+                index = 0; // Reset for next packet
+            }
+        }
+        
+        // Advance position in the DMA circular buffer
+        old_pos++;
+        if (old_pos == rx0_buffer_len) {
+            old_pos = 0;
+        }
     }
     #endif  
 }
 
 #ifdef SERIAL_AUX_RX
-void usart_process_aux_rx(SerialAuxRx *rx_in, SerialAuxRx *rx_out)
+void usart_process_aux_rx(uint8_t *buffer, uint8_t type)
 {
     uint16_t checksum;
-    if (rx_in->start == SERIAL_START_FRAME) {
-        // Exact same architecture as your outgoing telemetry!
-        checksum = (uint16_t)(rx_in->start ^ rx_in->k1 ^ rx_in->k2 ^ rx_in->k3 ^ rx_in->k4);
+    
+    if (type == 0) {
+        // --- TYPE 0: TUNE PACKET ---
+        SerialAuxRx_Tune *tune_cmd = (SerialAuxRx_Tune *)buffer;
         
-        if (rx_in->checksum == checksum) {
-            *rx_out = *rx_in;
-            timeoutCntSerial0  = 0;        
-            timeoutFlagSerial0 = 0;        
-
+        checksum = (uint16_t)(tune_cmd->start ^ tune_cmd->type ^ tune_cmd->k1 ^ tune_cmd->k2 ^ tune_cmd->k3 ^ tune_cmd->k4 ^ tune_cmd->thresh_on ^ tune_cmd->thresh_off);
+        
+        if (tune_cmd->checksum == checksum) {
             // UPDATE THE LIVE GAINS (Divide by 1000 to restore floats)
-            K1 = (float)rx_out->k1 / 1000.0f;
-            K2 = (float)rx_out->k2 / 1000.0f;
-            K3 = (float)rx_out->k3 / 1000.0f;
-            K4 = (float)rx_out->k4 / 1000.0f;
+            K1 = (float)tune_cmd->k1 / 1000.0f;
+            K2 = (float)tune_cmd->k2 / 1000.0f;
+            K3 = (float)tune_cmd->k3 / 1000.0f;
+            K4 = (float)tune_cmd->k4 / 1000.0f;
+            
+            // Apply Thresholds
+            THRESH_ON  = tune_cmd->thresh_on;
+            THRESH_OFF = tune_cmd->thresh_off;
+            
+            timeoutCntSerial0  = 0;        
+            timeoutFlagSerial0 = 0; 
+        }
+        
+    } else if (type == 3) {
+        // --- TYPE 3: LED PACKET ---
+        SerialAuxRx_LED *led_cmd = (SerialAuxRx_LED *)buffer;
+        
+        checksum = (uint16_t)(led_cmd->start ^ led_cmd->type ^ led_cmd->brightness ^ led_cmd->mode);
+        
+        if (led_cmd->checksum == checksum) {
+            // Save to global variables so handle_leds() can use them
+            cmdLedBrightness = led_cmd->brightness;
+            cmdLedMode       = led_cmd->mode;
+            
+            timeoutCntSerial0  = 0;        
+            timeoutFlagSerial0 = 0; 
         }
     }
 }

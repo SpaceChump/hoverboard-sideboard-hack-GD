@@ -54,27 +54,49 @@ typedef struct{
 #ifdef SERIAL_AUX_TX
 typedef struct{
   uint16_t  start;
+  uint8_t   type;
   int16_t   pitch;
   int16_t   pitch_rate;
-  int16_t   batVoltage;
   int16_t   speed;
-  int16_t   cmd1;
   int16_t   cmd2;
+  int16_t   adc_pad1;
+  int16_t   adc_pad2;
+  int16_t   batVoltage;
+  uint16_t  checksum;
+} SerialAuxTx_Fast;
+
+typedef struct{
+  uint16_t  start;
+  uint8_t   type;
   int16_t   sens1;
   int16_t   sens2;
   uint16_t  checksum;
-} SerialAuxTx;
+} SerialAuxTx_Slow;
 #endif
+
 /* Rx structure USART AUX */
 #ifdef SERIAL_AUX_RX
   typedef struct{
     uint16_t  start;
+    uint8_t   type;
     int16_t   k1;
     int16_t   k2;
     int16_t   k3;
     int16_t   k4;
+    int16_t   thresh_on;
+    int16_t   thresh_off;
     uint16_t  checksum;
-  } SerialAuxRx;
+  } SerialAuxRx_Tune;
+  
+  typedef struct{
+    uint16_t  start;
+    uint8_t   type;
+    uint8_t   brightness;
+    uint8_t   mode;
+    uint16_t  checksum;
+  } SerialAuxRx_LED;
+
+
   #ifdef CONTROL_IBUS
   typedef struct{
     uint8_t  start;
@@ -116,7 +138,7 @@ void usart_process_data(SerialFeedback *Feedback_in, SerialFeedback *Feedback_ou
 /* usart0 read functions */
 void usart0_rx_check(void);
 #ifdef SERIAL_AUX_RX
-void usart_process_aux_rx(SerialAuxRx *rx_in, SerialAuxRx *rx_out); // <--- Updated Prototype
+void usart_process_aux_rx(uint8_t *buffer, uint8_t type);
 #endif
 
 /* AUX Serial Print data */
