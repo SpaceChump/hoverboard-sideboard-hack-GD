@@ -70,6 +70,7 @@ typedef struct{
   uint16_t   type;
   int16_t   sens1;
   int16_t   sens2;
+  int16_t   temp;
   uint16_t  checksum;
 } SerialAuxTx_Slow;
 #endif

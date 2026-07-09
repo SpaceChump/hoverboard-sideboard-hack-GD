@@ -66,6 +66,8 @@ uint8_t cmdLedMode       = 0;
 uint16_t THRESH_ON = 3800;
 uint16_t THRESH_OFF = 3900;
 
+static uint16_t IMU_ANGLE = 300;
+
 static uint16_t timeoutCntSerial0  = 0;         
 static uint8_t  timeoutFlagSerial0 = 0;         
 
@@ -73,7 +75,7 @@ static uint8_t  timeoutFlagSerial0 = 0;
 float K1 = 0.0f;
 float K2 = -6.1526f;
 float K3 = -3.6737f;
-float K4 = -1.3059f;
+float K4 = -0.8f;
 #endif
 
 /*
@@ -389,9 +391,10 @@ void handle_usart(void) {
                 AuxTx_Slow.type       = 2;
                 AuxTx_Slow.sens1      = (int16_t)sensor1;
                 AuxTx_Slow.sens2      = (int16_t)sensor2;
+                AuxTx_Slow.temp       = (int16_t)Feedback.boardTemp;
                 
                 // XOR Checksum matching the original code style
-                AuxTx_Slow.checksum = (uint16_t)(AuxTx_Slow.start ^ AuxTx_Slow.type ^ AuxTx_Slow.sens1 ^ AuxTx_Slow.sens2);
+                AuxTx_Slow.checksum = (uint16_t)(AuxTx_Slow.start ^ AuxTx_Slow.type ^ AuxTx_Slow.sens1 ^ AuxTx_Slow.sens2 ^ AuxTx_Slow.temp);
                 
                 dma_channel_disable(USART0_TX_DMA_CH);
                 DMA_CHCNT(USART0_TX_DMA_CH)     = sizeof(SerialAuxTx_Slow);
@@ -401,7 +404,7 @@ void handle_usart(void) {
                 // --- SEND FAST PACKET ---
                 AuxTx_Fast.start      = (uint16_t)SERIAL_START_FRAME;
                 AuxTx_Fast.type       = 1;
-                AuxTx_Fast.pitch      = (int16_t)mpu.euler.pitch;
+                AuxTx_Fast.pitch      = (int16_t)(mpu.euler.pitch + IMU_ANGLE);
                 AuxTx_Fast.pitch_rate = (int16_t)mpu.euler.pitch_rate;
                 AuxTx_Fast.speed      = (int16_t)((Feedback.speedL_meas - Feedback.speedR_meas) / 2.0f);
                 AuxTx_Fast.cmd2       = (int16_t)cmd2;
@@ -479,7 +482,7 @@ void handle_leds(void) {
     
 
     // Headlights
-    float theta = (float)mpu.euler.pitch / 100.0f + 3.0f;
+    float theta = (float)((mpu.euler.pitch+IMU_ANGLE) / 100.0f);
 
     if (theta >= 0) {
         gpio_bit_set(LED4_GPIO_Port, LED4_Pin);
@@ -526,7 +529,7 @@ void handle_ctrl(void) {
 
         // Theta
         float theta_true = (float)mpu.euler.pitch / 100.0f;
-        float theta = theta_true + 3.0f;
+        float theta = theta_true + IMU_ANGLE / 100.0f;
 
         // Theta Dot
         float theta_dot = (float)mpu.euler.pitch_rate / 100.0f;
