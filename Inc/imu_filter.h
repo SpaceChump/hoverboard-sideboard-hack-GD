@@ -9,6 +9,7 @@
 #define IMU_OFFSET_Y  0.0000f 
 #define IMU_OFFSET_Z  0.0254f 
 
+
 // --- Compile-Time Sensor Scaling Macros ---
 #define GYRO_LSB_PER_DPS ( (MPU_GYRO_FSR == 250) ? 131.0f : \
                            (MPU_GYRO_FSR == 500) ? 65.5f : \
