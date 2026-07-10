@@ -63,8 +63,8 @@ uint8_t cmdLedBrightness = 0;
 uint8_t cmdLedMode       = 0;
 
 // Footpad Thresholds (Remove these from inside handle_sensors!)
-uint16_t THRESH_ON = 3800;
-uint16_t THRESH_OFF = 3900;
+static uint16_t THRESH_ON = 3800;
+static uint16_t THRESH_OFF = 3900;
 
 static uint16_t IMU_ANGLE = 300;
 
@@ -72,11 +72,22 @@ static uint16_t timeoutCntSerial0  = 0;
 static uint8_t  timeoutFlagSerial0 = 0;         
 
 // GLOBAL ACTIVE GAINS
-float K1 = 0.0f;
-float K2 = -6.1526f;
-float K3 = -3.6737f;
-float K4 = -0.8f;
+static float K1 = 0.0f;
+static float K2 = 0.0f;
+static float K3 = 0.0f;
+static float K4 = 0.0f;
 #endif
+
+typedef enum {
+    STATE_INIT = 0,
+    STATE_IDLE = 1,
+    STATE_RIDE = 2,
+    STATE_FAULT = 5
+} BoardState;
+
+BoardState current_state = STATE_INIT;
+
+float pushback = 0.0f;
 
 /*
 #ifdef SERIAL_AUX_RX
@@ -389,12 +400,13 @@ void handle_usart(void) {
                 
                 AuxTx_Slow.start      = (uint16_t)SERIAL_START_FRAME;
                 AuxTx_Slow.type       = 2;
+                AuxTx_Slow.state      = current_state;
                 AuxTx_Slow.sens1      = (int16_t)sensor1;
                 AuxTx_Slow.sens2      = (int16_t)sensor2;
                 AuxTx_Slow.temp       = (int16_t)Feedback.boardTemp;
                 
                 // XOR Checksum matching the original code style
-                AuxTx_Slow.checksum = (uint16_t)(AuxTx_Slow.start ^ AuxTx_Slow.type ^ AuxTx_Slow.sens1 ^ AuxTx_Slow.sens2 ^ AuxTx_Slow.temp);
+                AuxTx_Slow.checksum = (uint16_t)(AuxTx_Slow.start ^ AuxTx_Slow.type ^ AuxTx_Slow.state ^ AuxTx_Slow.sens1 ^ AuxTx_Slow.sens2 ^ AuxTx_Slow.temp);
                 
                 dma_channel_disable(USART0_TX_DMA_CH);
                 DMA_CHCNT(USART0_TX_DMA_CH)     = sizeof(SerialAuxTx_Slow);
@@ -405,6 +417,7 @@ void handle_usart(void) {
                 AuxTx_Fast.start      = (uint16_t)SERIAL_START_FRAME;
                 AuxTx_Fast.type       = 1;
                 AuxTx_Fast.pitch      = (int16_t)(mpu.euler.pitch + IMU_ANGLE);
+                AuxTx_Fast.pushback   = (int16_t)(pushback * 100.0f);
                 AuxTx_Fast.pitch_rate = (int16_t)mpu.euler.pitch_rate;
                 AuxTx_Fast.speed      = (int16_t)((Feedback.speedL_meas - Feedback.speedR_meas) / 2.0f);
                 AuxTx_Fast.cmd2       = (int16_t)cmd2;
@@ -414,7 +427,7 @@ void handle_usart(void) {
 
                 
                 // XOR Checksum
-                AuxTx_Fast.checksum = (uint16_t)(AuxTx_Fast.start ^ AuxTx_Fast.type ^ AuxTx_Fast.pitch ^ AuxTx_Fast.pitch_rate ^ AuxTx_Fast.speed ^ AuxTx_Fast.cmd2 ^ AuxTx_Fast.adc_pad1 ^ AuxTx_Fast.adc_pad2 ^ AuxTx_Fast.batVoltage);
+                AuxTx_Fast.checksum = (uint16_t)(AuxTx_Fast.start ^ AuxTx_Fast.type ^ AuxTx_Fast.pitch ^ AuxTx_Fast.pushback ^ AuxTx_Fast.pitch_rate ^ AuxTx_Fast.speed ^ AuxTx_Fast.cmd2 ^ AuxTx_Fast.adc_pad1 ^ AuxTx_Fast.adc_pad2 ^ AuxTx_Fast.batVoltage);
             
                 dma_channel_disable(USART0_TX_DMA_CH);
                 DMA_CHCNT(USART0_TX_DMA_CH)     = sizeof(SerialAuxTx_Fast);
@@ -518,33 +531,98 @@ void handle_ctrl(void) {
     }
     last_ctrl_time = current_time;
 
-    if (sensor1 == SET && sensor2 == SET) {
-        // 1. Collect States
-        // Position
-        float x = 0.0f;
 
-        // Velocity
-        float avg_rpm = (float)(Feedback.speedL_meas - Feedback.speedR_meas) / 2.0f;
-        float x_dot = avg_rpm * 3.1415f * 0.2794f / 60.0f;
+    float x = 0.0f;
+    float avg_rpm = (float)(Feedback.speedL_meas - Feedback.speedR_meas) / 2.0f;
+    float x_dot   = avg_rpm * 3.1415f * 0.2794f / 60.0f;
 
-        // Theta
-        float theta_true = (float)mpu.euler.pitch / 100.0f;
-        float theta = theta_true + IMU_ANGLE / 100.0f;
+    float theta_true = (float)mpu.euler.pitch / 100.0f;
+    float roll       = (float)mpu.euler.roll / 100.0f;
+    float theta      = theta_true + (IMU_ANGLE / 100.0f);
+    float theta_dot  = (float)mpu.euler.pitch_rate / 100.0f;
 
-        // Theta Dot
-        float theta_dot = (float)mpu.euler.pitch_rate / 100.0f;
+    bool pad1 = (sensor1 == SET);
+    bool pad2 = (sensor2 == SET);
+
+    bool isLevel = (theta > -5.0f && theta < 5.0f);
+    bool isSlow  = (avg_rpm > -30.0f && avg_rpm < 30.0f);
+    
+    // Safety thresholds
+    bool isDead       = (Feedback.batVoltage > 0 && Feedback.batVoltage < 3100);
+    bool isAlive      = (Feedback.batVoltage > 3200);
+    bool isOverheated = (Feedback.boardTemp > 800);
+    bool isCool       = (Feedback.boardTemp < 700);
+    bool isTipped = (theta > 45.0f || theta < -45.0f) || (roll > 45.0f || roll < -45.0f);
+
+    static uint16_t init_timer = 0;
+    static uint16_t heel_lift_timer = 0;
+
+
+    switch (current_state) {
+        case STATE_INIT:
+            if (init_timer++ > 200) { // Wait 2 seconds for IMU to settle
+                if (isDead || isOverheated) {
+                    current_state = STATE_FAULT;
+                } else if (!pad1 && !pad2) {
+                    current_state = STATE_IDLE;
+                }
+            }
+            break;
+            
+        case STATE_IDLE:
+            if (isDead || isOverheated) {
+                current_state = STATE_FAULT;
+            } else if ((pad1 && pad2) && isLevel && !isTipped) {
+                current_state = STATE_RIDE;
+            }
+            break;
+            
+        case STATE_FAULT:
+            // Hysteresis recovery
+            if (isCool && isAlive) {
+                current_state = STATE_IDLE;
+            }
+            break;
+            
+        case STATE_RIDE:
+            if (isTipped || (!pad1 && !pad2)) {
+                current_state = STATE_IDLE;
+            } else if (!pad1 && pad2 && isSlow) {
+                if (heel_lift_timer++ > 10) {
+                    current_state = STATE_IDLE;
+                    heel_lift_timer = 0;
+                }
+            } else {
+                heel_lift_timer = 0;
+            }
+            break;
+    }
+
+    if (current_state == STATE_RIDE) {
+        float target_pushback = 0.0f;
+        float speed_dir  = (avg_rpm > 0.0f) ? 1.0f : -1.0f;
+        float torque_dir = (cmd2 > 0) ? 1.0f : -1.0f;
+
+        if (avg_rpm > 700.0f || avg_rpm < -700.0f) {
+            target_pushback = 4.0f * speed_dir; 
+        } else if (cmd2 > 850 || cmd2 < -850) {
+            target_pushback = 5.0f * torque_dir; 
+        }
         
-        float Kt = 1000.0/30.0;    // cmd units / torque units
-        float u = -1.0f * (K1*x + K2*x_dot + K3*theta + K4*theta_dot);
+        pushback = (pushback * 0.98f) + (target_pushback * 0.02f);
+        float theta_mod = theta - pushback;
+
+        float Kt = 1000.0f / 30.0f;    
+        float u = -1.0f * (K1*x + K2*x_dot + K3*theta_mod + K4*theta_dot);
+
         cmd1 = 0;
         cmd2 = (int16_t)CLAMP(Kt*u, -1000.0f, 1000.0f);
-    }
-    else {
+        
+    } else {
         cmd1 = 0;
         cmd2 = 0;
+        pushback = 0.0f;
     }
-
-
 }
 
 

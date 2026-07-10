@@ -54,8 +54,9 @@ typedef struct{
 #ifdef SERIAL_AUX_TX
 typedef struct{
   uint16_t  start;
-  uint16_t   type;
+  uint16_t  type;
   int16_t   pitch;
+  int16_t   pushback;
   int16_t   pitch_rate;
   int16_t   speed;
   int16_t   cmd2;
@@ -67,7 +68,8 @@ typedef struct{
 
 typedef struct{
   uint16_t  start;
-  uint16_t   type;
+  uint16_t  type;
+  int16_t   state;
   int16_t   sens1;
   int16_t   sens2;
   int16_t   temp;
