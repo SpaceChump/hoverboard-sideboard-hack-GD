@@ -600,15 +600,29 @@ void handle_ctrl(void) {
 
     if (current_state == STATE_RIDE) {
         float target_pushback = 0.0f;
-        float speed_dir  = (avg_rpm > 0.0f) ? 1.0f : -1.0f;
-        float torque_dir = (cmd2 > 0) ? 1.0f : -1.0f;
+        float speed_dir  = (avg_rpm > 0.0f) ? 1.0f : -1.0f; // speed direction
+        float torque_dir = (cmd2 > 0) ? 1.0f : -1.0f; // torque direction
 
-        if (avg_rpm > 700.0f || avg_rpm < -700.0f) {
+        static float filtered_volts = 4200.0f; 
+        filtered_volts = (filtered_volts * 0.995f) + ((float)Feedback.batVoltage * 0.005f);
+
+        float max_rpm = 700.0f;
+        if (filtered_volts < 3400.0f) {
+            // Linearly scale max_rpm from 700 down to 0 as voltage drops from 34V to 31V
+            max_rpm = (filtered_volts - 3100.0f) * (700.0f / 300.0f);
+            if (max_rpm < 0.0f) max_rpm = 0.0f;
+        }
+
+        // Speed Triggered Pushback
+        if (avg_rpm > max_rpm || avg_rpm < -max_rpm) {
             target_pushback = 4.0f * speed_dir; 
-        } else if (cmd2 > 850 || cmd2 < -850) {
+        }
+        // Torque Triggered Pushback
+        else if (cmd2 > 850 || cmd2 < -850) {
             target_pushback = 5.0f * torque_dir; 
         }
-        
+
+        // Low pass filter
         pushback = (pushback * 0.98f) + (target_pushback * 0.02f);
         float theta_mod = theta - pushback;
 
