@@ -624,7 +624,7 @@ void handle_ctrl(void) {
 
         // Low pass filter
         pushback = (pushback * 0.98f) + (target_pushback * 0.02f);
-        float theta_mod = theta - pushback;
+        float theta_mod = theta + pushback;
 
         float Kt = 1000.0f / 30.0f;    
         float u = -1.0f * (K1*x + K2*x_dot + K3*theta_mod + K4*theta_dot);
